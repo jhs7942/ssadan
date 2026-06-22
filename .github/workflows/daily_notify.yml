@@ -8,6 +8,8 @@ on:
     # 실제 실행 시간: ~9시 10분 KST (git action의 cron은 최대 1시간 지연 가능)
     - cron: '50 23 * * 0-4'
   workflow_dispatch:  # 수동 실행 가능
+  repository_dispatch:  # Mattermost 등 외부 트리거용
+    types: [mm-daily]
 
 jobs:
   send-daily-lunch:
@@ -59,6 +61,13 @@ jobs:
       env:
         MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
         DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        # repository_dispatch(client_payload.date)로 날짜를 받으면 해당 날짜, 없으면 오늘
+        REQUESTED_DATE: ${{ github.event.client_payload.date }}
       run: |
         cd src
-        python main.py daily --db ../db
+        if [ -n "$REQUESTED_DATE" ]; then
+          echo "📅 요청된 날짜로 전송: $REQUESTED_DATE"
+          python main.py daily --date "$REQUESTED_DATE" --db ../db
+        else
+          python main.py daily --db ../db
+        fi

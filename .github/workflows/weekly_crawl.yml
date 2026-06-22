@@ -8,6 +8,8 @@ on:
     # 실제 실행 시간: ~8시 KST
     - cron: '50 22 * * 0'
   workflow_dispatch:  # 수동 실행 가능
+  repository_dispatch:  # Mattermost 등 외부 트리거용
+    types: [mm-crawl]
 
 jobs:
   crawl-weekly-menu:
