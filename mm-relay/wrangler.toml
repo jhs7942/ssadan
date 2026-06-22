@@ -1,0 +1,11 @@
+name = "ssadan-mm-relay"
+main = "worker.js"
+compatibility_date = "2024-09-01"
+
+# GitHub 레포지토리 ("owner/repo" 형식)
+[vars]
+GITHUB_REPO = "hanlyang0522/ssadan"
+
+# 아래 두 값은 코드에 두지 말고 secret 으로 등록:
+#   npx wrangler secret put GITHUB_TOKEN
+#   npx wrangler secret put MM_TOKEN
