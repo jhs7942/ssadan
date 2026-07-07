@@ -16,12 +16,13 @@ WEEKDAY_NAMES_KR = ['월', '화', '수', '목', '금', '토', '일']
 
 def crawl_weekly(db_path: str = "db", floor10_image: str = None) -> bool:
     """
-    Welstory Plus API에서 이번 주 식단 데이터를 가져와 Markdown 파일로 저장.
-    10층 식단은 커밋된 이미지(floor10_image) 또는 Mattermost 자동수집으로 병합.
+    Welstory Plus API에서 이번 주 20층 식단을 가져와 Markdown 파일로 저장.
+    floor10_image가 있으면 그 이미지로 10층을 파싱해 병합하고,
+    없으면(정기 크롤) 기존 파일의 10층을 그대로 보존한다.
 
     Args:
         db_path: Markdown 파일 저장 경로
-        floor10_image: 10층 식단 이미지 경로. 지정 시 Mattermost 대신 이 이미지를 파싱.
+        floor10_image: 10층 식단 이미지 경로. 지정 시 이 이미지로 10층을 파싱.
 
     Returns:
         성공 여부
@@ -45,8 +46,13 @@ def crawl_weekly(db_path: str = "db", floor10_image: str = None) -> bool:
 
     print(f"✓ {len(meal_data)}개 날짜의 식단 조회 완료")
 
-    print("\n2️⃣  10층 식단 수집 중...")
-    _try_fetch_floor10(crawler, meal_data, today, image_path=floor10_image)
+    print("\n2️⃣  10층 식단 처리 중...")
+    if floor10_image:
+        # 이미지 커밋 경로: 커밋된 이미지에서 10층 파싱해 병합
+        _try_fetch_floor10(crawler, meal_data, today, image_path=floor10_image)
+    else:
+        # 정기 크롤 경로: 20층만 갱신하고 기존 파일의 10층은 그대로 보존
+        _preserve_existing_floor10(crawler, meal_data, db_path, monday)
 
     print("\n3️⃣  Markdown 변환 및 저장 중...")
     markdown = crawler.convert_to_markdown(meal_data)
@@ -95,6 +101,24 @@ def _try_fetch_floor10(crawler, meal_data: dict, reference_date, image_path: str
     except Exception as e:
         print(f"⚠️  10층 식단 수집/파싱 실패: {e}")
         print("   → 10층 placeholder 유지하고 계속 진행합니다.")
+
+
+def _preserve_existing_floor10(crawler, meal_data: dict, db_path: str, monday) -> None:
+    """
+    정기 크롤 시 기존 db 파일의 10층 식단을 읽어 보존 (20층만 갱신, 10층은 미변경).
+    10층은 이미지 커밋(parse_image)으로만 갱신되므로, 정기 크롤이 placeholder로 덮어쓰지 않게 한다.
+    """
+    monday_str = monday.strftime("%Y-%m-%d")
+    file_path = os.path.join(db_path, f"{monday_str}.md")
+    week_dates = [(monday + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(5)]
+
+    existing = crawler.load_floor10_from_markdown(file_path, week_dates)
+    if existing:
+        crawler.merge_floor10_data(meal_data, existing)
+        count = sum(len(v) for v in existing.values())
+        print(f"✓ 기존 10층 식단 {count}개 항목 보존 (10층은 이미지 커밋으로만 갱신)")
+    else:
+        print("   기존 10층 데이터 없음 → placeholder 유지 (이미지 커밋 시 채워짐)")
 
 
 def send_daily_lunch(date: str = None, db_path: str = "db", dry_run: bool = False) -> bool:

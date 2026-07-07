@@ -396,6 +396,44 @@ class WelstoryCrawler:
                 if menu and menu != self.FLOOR_10_PLACEHOLDER:
                     meal_data[date_str][course] = menu
 
+    def load_floor10_from_markdown(
+        self, file_path: str, week_dates: List[str]
+    ) -> Dict[str, Dict[str, str]]:
+        """
+        저장된 주간 Markdown에서 10층 코너 행을 읽어 반환 (실제 메뉴만, placeholder 제외).
+
+        Args:
+            file_path: 주간 Markdown 파일 경로
+            week_dates: 그 주 월~금 날짜 문자열 리스트 (표 컬럼 순서와 일치)
+
+        Returns:
+            Dict[날짜 (YYYY-MM-DD), Dict[코너명, 메뉴]]
+        """
+        result: Dict[str, Dict[str, str]] = {}
+        if not os.path.exists(file_path):
+            return result
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        for line in lines:
+            line = line.strip()
+            if not line.startswith("|"):
+                continue
+            cols = [c.strip() for c in line.split("|") if c.strip() != ""]
+            if len(cols) < 6:
+                continue
+            course = cols[0].replace("**", "").strip()
+            if course not in self.FLOOR_10_COURSES:
+                continue
+            for i, date_str in enumerate(week_dates):
+                if i + 1 >= len(cols):
+                    break
+                menu = cols[i + 1].strip()
+                if menu and menu != self.FLOOR_10_PLACEHOLDER and menu != "-":
+                    result.setdefault(date_str, {})[course] = menu
+        return result
+
     def process_and_save(self, db_path: str = "db") -> Tuple[str, str]:
         """
         Welstory Plus API로 이번 주 식단 조회, Markdown 변환, 파일 저장

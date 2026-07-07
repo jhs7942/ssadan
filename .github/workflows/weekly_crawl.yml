@@ -34,10 +34,7 @@ jobs:
       env:
         WELSTORY_USERNAME: ${{ secrets.WELSTORY_USERNAME }}
         WELSTORY_PASSWORD: ${{ secrets.WELSTORY_PASSWORD }}
-        MATTERMOST_BASE_URL: ${{ secrets.MATTERMOST_BASE_URL }}
-        MATTERMOST_CHANNEL_ID: ${{ secrets.MATTERMOST_CHANNEL_ID }}
-        MM_LOGIN_JSON: ${{ secrets.MM_LOGIN_JSON }}
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        # 정기 크롤은 20층만 갱신하고 10층은 기존 파일을 보존하므로 Gemini/Mattermost 시크릿이 필요 없음
       run: |
         cd src
         python main.py crawl --db ../db
