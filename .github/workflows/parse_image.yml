@@ -1,0 +1,87 @@
+name: Parse 10F Image and Notify
+
+# images/ 에 10층 주간 식단 이미지를 커밋하면:
+#   1) 커밋된 이미지를 Gemini로 파싱해 이번 주 db/*.md의 10층 식단에 병합
+#   2) 오늘 점심 식단을 Mattermost/Discord 웹훅으로 발송
+on:
+  push:
+    paths:
+      - 'images/**'
+  workflow_dispatch:  # 수동 실행 가능
+
+jobs:
+  parse-and-notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # db/*.md 커밋/푸시에 필요
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0  # 이번 push에서 변경된 이미지 탐지(git diff)에 필요
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+
+    - name: Select committed image
+      id: pick
+      run: |
+        IMG=""
+        # 1) 이번 push에서 추가/수정된 images/ 파일 우선
+        if git cat-file -e "${{ github.event.before }}^{commit}" 2>/dev/null; then
+          IMG=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" \
+                | grep -iE '^images/.*\.(png|jpe?g)$' | head -n1 || true)
+        fi
+        # 2) 폴백(수동 실행 등): 가장 최근 커밋된 이미지
+        if [ -z "$IMG" ]; then
+          IMG=$(git log --diff-filter=AM --name-only --pretty=format: -- 'images/*' \
+                | grep -iE '\.(png|jpe?g)$' | head -n1 || true)
+        fi
+        if [ -z "$IMG" ]; then
+          echo "found=false" >> "$GITHUB_OUTPUT"
+          echo "⚠️ images/ 에서 파싱할 이미지를 찾지 못했습니다."
+        else
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "image=$IMG" >> "$GITHUB_OUTPUT"
+          echo "✓ 파싱 대상 이미지: $IMG"
+        fi
+
+    - name: Parse image and merge weekly menu
+      if: steps.pick.outputs.found == 'true'
+      env:
+        WELSTORY_USERNAME: ${{ secrets.WELSTORY_USERNAME }}
+        WELSTORY_PASSWORD: ${{ secrets.WELSTORY_PASSWORD }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      run: |
+        cd src
+        python main.py crawl --floor10-image "../${{ steps.pick.outputs.image }}" --db ../db
+
+    - name: Commit updated menu
+      if: steps.pick.outputs.found == 'true'
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add db/*.md
+        if git diff --staged --quiet; then
+          echo "변경 사항 없음, 커밋 생략"
+        else
+          git commit -m "Merge 10F menu from committed image [skip ci]"
+          git pull --rebase origin "${{ github.ref_name }}"
+          git push
+          echo "✓ 10층 식단이 병합/푸시되었습니다."
+        fi
+
+    - name: Send today's lunch notification
+      if: steps.pick.outputs.found == 'true'
+      env:
+        MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
+        DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      run: |
+        cd src
+        python main.py daily --db ../db

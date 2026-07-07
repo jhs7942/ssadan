@@ -26,8 +26,10 @@
 ## 작동 방법
 
 1. **식단 크롤링**: 매주 월요일 [welplan.pmh.codes](https://welplan.pmh.codes)에서 멀티캠퍼스 한 주(월~금) 식단을 가져와 `db/yyyy-mm-dd.md` 파일로 저장
-   - 20층 식단: welplan.pmh.codes API 사용
-   - 10층 식단: Mattermost 채널에서 식단 이미지를 자동 수집한 뒤 Gemini API로 파싱해 병합 (실패 시 placeholder 유지)
+   - 20층 식단: Welstory Plus API 사용
+   - 10층 식단: 두 가지 방법 지원
+     - **(A) 이미지 커밋(권장)**: `images/` 폴더에 주간 식단표 이미지를 커밋하면 자동으로 파싱·병합 후 그날 점심 알림까지 발송 ([images/README.md](images/README.md) 참고, Mattermost 로그인 시크릿 불필요)
+     - (B) Mattermost 채널에서 이미지를 자동 수집한 뒤 Gemini API로 파싱해 병합 (실패 시 placeholder 유지)
 2. **일일 알림**: 매일 오전 9시 10분~9시 40분(KST)에 그 날 점심 식단을 Mattermost와 Discord로 전송 (GitHub Actions 스케줄링 지연 최대 30분 발생 가능)
 
 ## 설치

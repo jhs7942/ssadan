@@ -14,13 +14,14 @@ from welstory_crawler import WelstoryCrawler
 WEEKDAY_NAMES_KR = ['월', '화', '수', '목', '금', '토', '일']
 
 
-def crawl_weekly(db_path: str = "db") -> bool:
+def crawl_weekly(db_path: str = "db", floor10_image: str = None) -> bool:
     """
     Welstory Plus API에서 이번 주 식단 데이터를 가져와 Markdown 파일로 저장.
-    Mattermost에서 10층 식단 이미지도 수집해 병합.
+    10층 식단은 커밋된 이미지(floor10_image) 또는 Mattermost 자동수집으로 병합.
 
     Args:
         db_path: Markdown 파일 저장 경로
+        floor10_image: 10층 식단 이미지 경로. 지정 시 Mattermost 대신 이 이미지를 파싱.
 
     Returns:
         성공 여부
@@ -44,8 +45,8 @@ def crawl_weekly(db_path: str = "db") -> bool:
 
     print(f"✓ {len(meal_data)}개 날짜의 식단 조회 완료")
 
-    print("\n2️⃣  10층 식단 이미지 수집 중...")
-    _try_fetch_floor10(crawler, meal_data, today)
+    print("\n2️⃣  10층 식단 수집 중...")
+    _try_fetch_floor10(crawler, meal_data, today, image_path=floor10_image)
 
     print("\n3️⃣  Markdown 변환 및 저장 중...")
     markdown = crawler.convert_to_markdown(meal_data)
@@ -56,25 +57,37 @@ def crawl_weekly(db_path: str = "db") -> bool:
     return True
 
 
-def _try_fetch_floor10(crawler, meal_data: dict, reference_date) -> None:
+def _try_fetch_floor10(crawler, meal_data: dict, reference_date, image_path: str = None) -> None:
     """
-    Mattermost에서 10층 식단 이미지 수집 후 Gemini로 파싱해 meal_data에 병합.
-    실패 시 경고 로그만 출력하고 계속 진행.
+    10층 식단 이미지를 Gemini로 파싱해 meal_data에 병합.
+    image_path가 주어지면 그 이미지를, 없으면 Mattermost에서 자동 수집한 이미지를 사용.
+    실패 시 경고 로그만 출력하고 계속 진행(10층 placeholder 유지).
     """
-    # 필요 환경변수 확인
-    required_vars = ["MATTERMOST_BASE_URL", "MATTERMOST_CHANNEL_ID", "MM_LOGIN_JSON", "GEMINI_API_KEY"]
-    missing = [v for v in required_vars if not os.environ.get(v)]
-    if missing:
-        print(f"⚠️  10층 수집 환경변수 미설정 ({', '.join(missing)}), placeholder 유지")
+    if not os.environ.get("GEMINI_API_KEY"):
+        print("⚠️  GEMINI_API_KEY 미설정, 10층 placeholder 유지")
         return
 
     try:
-        from mm_image_fetcher import MattermostImageFetcher
         from ten_floor_parser import parse_floor10_image
 
-        tmp_dir = tempfile.mkdtemp()
-        fetcher = MattermostImageFetcher()
-        image_path = fetcher.fetch_floor10_image(dest_dir=tmp_dir)
+        if image_path:
+            # 1) 커밋/전달된 로컬 이미지 사용
+            if not os.path.exists(image_path):
+                print(f"⚠️  이미지 파일을 찾을 수 없음: {image_path}, placeholder 유지")
+                return
+            print(f"  🖼️  로컬 이미지 파싱: {image_path}")
+        else:
+            # 2) Mattermost 채널에서 자동 수집
+            required_vars = ["MATTERMOST_BASE_URL", "MATTERMOST_CHANNEL_ID", "MM_LOGIN_JSON"]
+            missing = [v for v in required_vars if not os.environ.get(v)]
+            if missing:
+                print(f"⚠️  10층 수집 환경변수 미설정 ({', '.join(missing)}), placeholder 유지")
+                return
+            from mm_image_fetcher import MattermostImageFetcher
+
+            tmp_dir = tempfile.mkdtemp()
+            fetcher = MattermostImageFetcher()
+            image_path = fetcher.fetch_floor10_image(dest_dir=tmp_dir)
 
         floor10_data = parse_floor10_image(image_path, reference_date=reference_date)
         crawler.merge_floor10_data(meal_data, floor10_data)
@@ -146,8 +159,11 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 사용 예시:
-  # 웰스토리 API로 이번 주 식단 크롤링
+  # 웰스토리 API로 이번 주 식단 크롤링 (10층은 Mattermost 자동수집)
   python main.py crawl
+
+  # 커밋한 이미지로 10층 식단 파싱해 병합
+  python main.py crawl --floor10-image ../images/10f.png
 
   # 오늘 점심 식단 전송
   python main.py daily
@@ -162,6 +178,10 @@ def main():
     # crawl 명령
     crawl_parser = subparsers.add_parser('crawl', help='웰스토리 API로 이번 주 식단 크롤링')
     crawl_parser.add_argument('--db', default='db', help='Markdown 파일 저장 경로 (기본값: db)')
+    crawl_parser.add_argument(
+        '--floor10-image',
+        help='10층 식단 이미지 경로. 지정 시 Mattermost 자동수집 대신 이 이미지를 파싱해 병합',
+    )
     
     # daily 명령
     daily_parser = subparsers.add_parser('daily', help='일일 점심 식단 전송')
@@ -177,7 +197,7 @@ def main():
     
     try:
         if args.command == 'crawl':
-            success = crawl_weekly(args.db)
+            success = crawl_weekly(args.db, getattr(args, 'floor10_image', None))
             return 0 if success else 1
         
         elif args.command == 'daily':
