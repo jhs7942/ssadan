@@ -2,13 +2,15 @@ name: Daily Lunch Notification
 
 on:
   schedule:
-    # 평일 오전 9시 10분 (KST = UTC+9) 목표
-    # GitHub Actions 스케줄링 지연(~30분)을 고려하여 8시 40분에 예약
-    # UTC 기준 23시 50분 (전날) = KST 8시 50분
-    # 실제 실행 시간: ~9시 10분 KST (git action의 cron은 최대 1시간 지연 가능)
-    - cron: '50 23 * * 0-4'
+    # 목표: 평일 오전 9시경(KST = UTC+9) 발송
+    # 이 저장소는 fork라 GitHub이 예약 워크플로우 실행을 뒤로 미룹니다.
+    #   실측 지연: 예약 대비 약 1.5~2시간 (원본 저장소는 ~20분).
+    # 그래서 예약을 그만큼 앞당김: 22:20 UTC(전날) = 07:20 KST
+    #   → 관측 지연(~90~110분)을 더해 실제 실행 ~08:45~09:30 KST (부하에 따라 변동)
+    # 정확히 9시에 보내려면 아래 repository_dispatch를 외부 스케줄러(예: cron-job.org)로 호출하세요.
+    - cron: '20 22 * * 0-4'
   workflow_dispatch:  # 수동 실행 가능
-  repository_dispatch:  # Mattermost 등 외부 트리거용
+  repository_dispatch:  # Mattermost 등 외부 트리거용(정시 발송에 권장)
     types: [mm-daily]
 
 jobs:
