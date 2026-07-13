@@ -63,6 +63,10 @@ jobs:
       env:
         MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
         DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        # 주간 파일이 없을 때 daily가 20층을 즉석 크롤(사진 없이)하기 위해 필요.
+        # 10층은 이미지 커밋 전까지 '준비중...'으로 유지됨.
+        WELSTORY_USERNAME: ${{ secrets.WELSTORY_USERNAME }}
+        WELSTORY_PASSWORD: ${{ secrets.WELSTORY_PASSWORD }}
         # repository_dispatch(client_payload.date)로 날짜를 받으면 해당 날짜, 없으면 오늘
         REQUESTED_DATE: ${{ github.event.client_payload.date }}
       run: |

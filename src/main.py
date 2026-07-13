@@ -156,6 +156,14 @@ def send_daily_lunch(date: str = None, db_path: str = "db", dry_run: bool = Fals
     print("=" * 60)
     
     try:
+        # 주간 식단 파일이 없으면(정기 크롤 실패 등) 사진 없이도 20층을 즉석 크롤로 확보한다.
+        # 10층은 이미지 커밋 전까지 '준비중...' placeholder로 유지된다.
+        monday = now_kst - timedelta(days=now_kst.weekday())
+        weekly_path = os.path.join(db_path, f"{monday.strftime('%Y-%m-%d')}.md")
+        if not os.path.exists(weekly_path):
+            print(f"ℹ️  주간 식단 파일 없음 → 20층 메뉴 즉석 크롤 (10층은 '준비중...' 유지): {weekly_path}")
+            crawl_weekly(db_path)
+
         sender = NotificationSender(skip_validation=dry_run)
         success = sender.load_and_send_daily(date, db_path, dry_run)
         
